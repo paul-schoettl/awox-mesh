@@ -184,7 +184,7 @@ def test_decode_power_cut_reads_white_scene_mired():
 
 
 def test_decode_power_cut_ignores_scene_bytes_without_scene_mode():
-    """The lamp fills the scene bytes with 0xff when the mode is not 'scene'."""
+    """Unused scene bytes carry no information and must not leak into the result."""
     block = bytes([0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0x00] + [0] * 9)
     decoded = ap.decode_power_cut(block)
     assert decoded["mesh_id"] == 0x1234

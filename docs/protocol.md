@@ -173,7 +173,8 @@ get  ->  [0x43][mesh_lo][mesh_hi]
 Bit 1 of `flags` selects colour (`x` = hue, `y` = saturation) over white
 (`x`/`y` = mired, little endian). `mode` is `0` = on, `1` = previous state,
 `2` = scene; the app offers no "off". The scene bytes are only meaningful in
-scene mode — the lamp fills them with `0xff` otherwise. A write uses opcode
+scene mode; when it is not set they carry no information (observed as `0xff` on
+an untouched value and `0x00` after a write). A write uses opcode
 `0x42` and the same five payload bytes:
 
 ```
