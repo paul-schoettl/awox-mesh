@@ -127,6 +127,7 @@ destination inside the block):
 | Set clock | `0x30` |
 | Write schedule | `0x33` |
 | Read schedule | `0x35` |
+| Read power-cut mode | `0x43` |
 
 The set-clock payload is seconds since 2000-01-01 UTC plus the UTC offset,
 both 32-bit little endian. Schedules do not fire at the right time until the
@@ -156,6 +157,34 @@ Two traps:
 
 Routine ids seen so far: `1` presence simulator, `2` timer, `3` program,
 `5` nightlight, `7` dawn simulator.
+
+## Power-cut mode
+
+The vendor app has a *power cut* screen: what the lamp does when mains power
+returns. It is a query frame with a real destination inside the payload. A
+reply arrives as a notification flagged `0x43`; the decrypted block starts with
+the mesh id, and the reply mirrors the write payload:
+
+```
+get  ->  [0x43][mesh_lo][mesh_hi]
+     <-  0x43 | [mesh_lo][mesh_hi][flags][brightness][x][y][mode]
+```
+
+Bit 1 of `flags` selects colour (`x` = hue, `y` = saturation) over white
+(`x`/`y` = mired, little endian). `mode` is `0` = on, `1` = previous state,
+`2` = scene; the app offers no "off". The scene bytes are only meaningful in
+scene mode — the lamp fills them with `0xff` otherwise. A write uses opcode
+`0x42` and the same five payload bytes:
+
+```
+set  ->  [0x42][mesh_lo][mesh_hi][flags][brightness][x][y][mode]
+```
+
+Readback and writing (`on`, `previous`) verified on `EBF_RGB_Zm`, firmware
+`3.0.1_1593`; the scene payload and `3.0.2_1610` are untested. On the Zigbee
+side the same setting is the standard `StartUpOnOff`
+attribute (`0x4003` of the On/Off cluster), which Zigbee2MQTT writes as
+`power_on_behavior`; the Hue bridge does not expose it.
 
 ## Status blocks
 
