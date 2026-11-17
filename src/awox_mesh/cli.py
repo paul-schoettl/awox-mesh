@@ -90,6 +90,18 @@ def _run_http(client: _Client, args) -> int:
         client.post("/white", {k: v for k, v in body.items() if v is not None})
         print("white set")
         return 0
+    if args.command == "power-cut":
+        if args.action == "set":
+            body = {"mode": args.mode}
+            body.update({name: getattr(args, name)
+                         for name in ("brightness", "hue", "saturation", "mired")
+                         if getattr(args, name) is not None})
+            if args.colour:
+                body["colour"] = True
+            print(json.dumps(client.post("/power-cut", body), indent=2))
+        else:
+            print(json.dumps(client.get("/power-cut"), indent=2))
+        return 0
     if args.command == "lightshow":
         if args.action == "status":
             data = client.get("/lightshow")
@@ -161,14 +173,16 @@ async def _run_direct(args) -> int:
     from .config import MESH_ID_HELP, Config, ConfigError
     from .connection import create
 
-    if args.command not in ("on", "off", "toggle", "state", "brightness", "lightshow"):
+    if args.command not in ("on", "off", "toggle", "state", "brightness", "lightshow",
+                            "power-cut"):
         return _fail(f"{args.command} needs the bridge -- drop --direct, "
                      "or use curl against the REST API")
 
     mesh = None
     try:
         config = Config.from_env()
-        needs_id = args.command in ("on", "off", "toggle", "brightness", "lightshow")
+        needs_id = args.command in ("on", "off", "toggle", "brightness", "lightshow",
+                                    "power-cut")
         if needs_id and config.mesh_id is None:
             return _fail(MESH_ID_HELP)
         mesh = create(config)
@@ -178,6 +192,23 @@ async def _run_direct(args) -> int:
             if not devices:
                 return _fail("no status from the lamp")
             _print_devices(devices)
+            return 0
+        if args.command == "power-cut":
+            if args.action == "set":
+                kwargs = {name: getattr(args, name)
+                          for name in ("brightness", "hue", "saturation", "mired")
+                          if getattr(args, name) is not None}
+                if args.colour:
+                    kwargs["colour"] = True
+                await mesh.send(lambda k, m: ap.set_power_cut_mode(
+                    k, m, args.mode, **kwargs))
+                await asyncio.sleep(1.0)
+            blocks = await mesh.query(
+                lambda k, m: ap.get_power_cut_mode(k, m), flags=(0x43,))
+            if not blocks:
+                return _fail("the lamp did not answer the power-cut query "
+                             "(the gatt backend is required for replies)")
+            print(json.dumps(ap.decode_power_cut(blocks[-1]), indent=2))
             return 0
         if args.command == "brightness":
             await mesh.send(lambda k, m: ap.set_brightness(k, m, args.percent))
@@ -269,6 +300,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("health", parents=[common], help="bridge/connection status")
 
+    pc = sub.add_parser("power-cut", parents=[common],
+                        help="read or set the power-cut (startup) behaviour")
+    pc.add_argument("action", nargs="?", default="get", choices=("get", "set"))
+    pc.add_argument("mode", nargs="?", choices=("on", "previous", "scene"),
+                    help="startup behaviour to store")
+    pc.add_argument("--brightness", type=int, choices=range(0, 101))
+    pc.add_argument("--colour", action="store_true",
+                    help="scene uses hue/saturation instead of mired")
+    pc.add_argument("--hue", type=int, choices=range(0, 255))
+    pc.add_argument("--saturation", type=int, choices=range(0, 255))
+    pc.add_argument("--mired", type=int, choices=range(153, 455))
+
     ls = sub.add_parser("lightshow", parents=[common], help="control the light show")
     ls.add_argument("action", nargs="?", default="start",
                     choices=("start", "stop", "status"))
@@ -290,6 +333,9 @@ def main() -> int:
     if args.command == "white" and args.temperature is None \
             and args.brightness is None:
         return _fail("white needs --temperature and/or --brightness")
+
+    if args.command == "power-cut" and args.action == "set" and args.mode is None:
+        return _fail("power-cut set needs a mode: on, previous or scene")
 
     if args.command == "discover":
         if args.direct:
