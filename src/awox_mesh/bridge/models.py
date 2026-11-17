@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -38,3 +40,13 @@ class SequenceBody(BaseModel):
     sequence: int = Field(ge=0, le=6, description="built-in colour sequence 0..6")
     duration_ms: int = Field(default=3072, ge=100, le=60000,
                              description="time per colour")
+
+
+class PowerCutBody(BaseModel):
+    mode: Literal["on", "previous", "scene"]
+    brightness: int = Field(default=100, ge=0, le=100)
+    colour: bool = Field(default=False, description="scene uses hue/saturation")
+    hue: int = Field(default=0, ge=0, le=254, description="device range 0..254")
+    saturation: int = Field(default=0, ge=0, le=254)
+    mired: int = Field(default=370, ge=153, le=454,
+                       description="white scene mired 153..454")

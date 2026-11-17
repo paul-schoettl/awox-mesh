@@ -17,7 +17,7 @@ from ..config import Config, ConfigError, load_default_env_files, load_env_file
 from ..connection import create
 from ..lightshow import MIN_PAUSE, run_lightshow
 from ..protocol import Status
-from .models import BrightnessBody, ColorBody, DawnBody, SequenceBody, WhiteBody
+from .models import BrightnessBody, ColorBody, DawnBody, PowerCutBody, SequenceBody, WhiteBody
 
 logger = logging.getLogger("awox.bridge")
 
@@ -243,6 +243,34 @@ def create_app(mesh, config) -> FastAPI:
         except ConnectionError as err:
             raise HTTPException(status_code=503, detail=str(err)) from err
         return {"ok": True}
+
+    @app.get("/power-cut", summary="Power-cut mode (startup behaviour, read-only)")
+    async def get_power_cut(target: int | None = Target):
+        dest = _dest(target)
+        try:
+            blocks = await mesh.query(
+                lambda key, _mid: ap.get_power_cut_mode(key, dest), flags=(0x43,))
+        except ConnectionError as err:
+            raise HTTPException(status_code=503, detail=str(err)) from err
+        if not blocks:
+            raise HTTPException(status_code=504,
+                                detail="lamp did not report the power-cut mode")
+        return ap.decode_power_cut(blocks[-1])
+
+    @app.post("/power-cut", summary="Set the power-cut mode and read it back")
+    async def set_power_cut(body: PowerCutBody, target: int | None = Target):
+        dest = _dest(target)
+        await _run(lambda key, d: ap.set_power_cut_mode(
+            key, d, body.mode, brightness=body.brightness, colour=body.colour,
+            hue=body.hue, saturation=body.saturation, mired=body.mired), target)
+        await asyncio.sleep(1.0)
+        try:
+            blocks = await mesh.query(
+                lambda key, _mid: ap.get_power_cut_mode(key, dest), flags=(0x43,))
+        except ConnectionError as err:
+            raise HTTPException(status_code=503, detail=str(err)) from err
+        return {"ok": True, "target": dest,
+                "saved": ap.decode_power_cut(blocks[-1]) if blocks else None}
 
     @app.get("/dawn", summary="Read the stored dawn alarm")
     async def get_dawn(target: int | None = Target):
