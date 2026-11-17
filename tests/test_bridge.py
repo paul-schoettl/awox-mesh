@@ -91,6 +91,7 @@ def test_bridge_starts_without_mesh_id_and_guards_control():
             assert "AWOX_MESH_ID" in response.json()["detail"], action
         assert c.post("/brightness", json={"percent": 50}).status_code == 503
         assert c.get("/dawn").status_code == 503
+        assert c.get("/power-cut").status_code == 503
         assert mesh.sent == [], "no command may be sent without a target"
 
 
@@ -198,6 +199,24 @@ def test_lightshow_status_reports_nothing_running(client):
 
 def test_dawn_read_reports_504_when_the_lamp_stays_silent(client):
     assert client.get("/dawn").status_code == 504
+
+
+def test_power_cut_read_reports_504_when_the_lamp_stays_silent(client):
+    assert client.get("/power-cut").status_code == 504
+
+
+def test_power_cut_set_sends_a_frame_and_reports_no_readback():
+    mesh = StubMesh(devices=[{"mesh_id": DEST, "state": True}])
+    with TestClient(create_app(mesh, make_config())) as c:
+        response = c.post("/power-cut", json={"mode": "previous"})
+        assert response.status_code == 200
+        assert response.json()["saved"] is None
+    assert len(mesh.sent) == 1
+    assert mesh.sent[0][0] == 0x02
+
+
+def test_power_cut_set_rejects_unknown_modes(client):
+    assert client.post("/power-cut", json={"mode": "off"}).status_code == 422
 
 
 def test_sequence_body_validation(client):
