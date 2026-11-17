@@ -125,6 +125,78 @@ def test_build_status_query_uses_broadcast_by_default():
     assert block[3:5] == b"\xff\xff"
 
 
+def test_get_power_cut_mode_packet_shape():
+    packet = ap.get_power_cut_mode(SESSION_KEY, DEST)
+    assert packet[0] == 0x02  # query frame, not a control command
+    block = ap.att_decrypt(SESSION_KEY, packet[1:17])
+    assert ap.crc8(block[1:1 + block[1] + 1]) == block[0]
+    assert block[1] == 3  # length of the payload
+    assert block[2] == 0x43
+    assert block[3:5] == DEST.to_bytes(2, "little")
+
+
+def test_set_power_cut_mode_writes_mode_without_scene():
+    packet = ap.set_power_cut_mode(SESSION_KEY, DEST, "previous")
+    assert packet[0] == 0x02
+    block = ap.att_decrypt(SESSION_KEY, packet[1:17])
+    assert ap.crc8(block[1:1 + block[1] + 1]) == block[0]
+    assert block[1] == 8
+    assert block[2] == 0x42
+    assert block[3:5] == DEST.to_bytes(2, "little")
+    assert block[5:10] == bytes([0, 0, 0, 0, 1])
+
+
+def test_set_power_cut_mode_scene_colour_payload():
+    packet = ap.set_power_cut_mode(SESSION_KEY, DEST, "scene", colour=True,
+                                   brightness=100, hue=0x7F, saturation=0x40)
+    block = ap.att_decrypt(SESSION_KEY, packet[1:17])
+    assert block[5:10] == bytes([0x03, 100, 0x7F, 0x40, 2])
+
+
+def test_set_power_cut_mode_scene_white_payload():
+    packet = ap.set_power_cut_mode(SESSION_KEY, DEST, "scene", brightness=80,
+                                   mired=370)
+    block = ap.att_decrypt(SESSION_KEY, packet[1:17])
+    assert block[5:10] == bytes([0x01, 80, 0x72, 0x01, 2])
+
+
+def test_set_power_cut_mode_rejects_unknown_modes():
+    with pytest.raises(ValueError):
+        ap.set_power_cut_mode(SESSION_KEY, DEST, "off")
+
+
+def test_decode_power_cut_reads_mode_and_colour_scene():
+    block = bytes([0x34, 0x12, 0x03, 100, 0x7F, 0x40, 0x02] + [0] * 9)
+    decoded = ap.decode_power_cut(block)
+    assert decoded["mesh_id"] == 0x1234
+    assert decoded["mode"] == "scene"
+    assert decoded["scene"] == {"colour": True, "brightness": 100,
+                                "hue": 0x7F, "saturation": 0x40, "mired": None}
+    assert decoded["raw"] == block.hex()
+
+
+def test_decode_power_cut_reads_white_scene_mired():
+    block = bytes([0x34, 0x12, 0x01, 80, 0x72, 0x01, 0x02] + [0] * 9)
+    scene = ap.decode_power_cut(block)["scene"]
+    assert scene["colour"] is False
+    assert scene["mired"] == 0x0172
+    assert scene["hue"] is None
+
+
+def test_decode_power_cut_ignores_scene_bytes_without_scene_mode():
+    """The lamp fills the scene bytes with 0xff when the mode is not 'scene'."""
+    block = bytes([0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0x00] + [0] * 9)
+    decoded = ap.decode_power_cut(block)
+    assert decoded["mesh_id"] == 0x1234
+    assert decoded["mode"] == "on"
+    assert decoded["scene"] is None
+
+
+def test_decode_power_cut_passes_unknown_modes_through():
+    block = bytes([0x34, 0x12, 0, 0, 0, 0, 0x07] + [0] * 9)
+    assert ap.decode_power_cut(block)["mode"] == 7
+
+
 def test_decode_packet_validates_crc():
     packet = ap.set_power(SESSION_KEY, DEST, True)
     flag, block, rest = ap.decode_packet(SESSION_KEY, packet)

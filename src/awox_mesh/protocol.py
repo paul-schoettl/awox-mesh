@@ -154,6 +154,68 @@ def get_schedule(session_key: bytes, dest: int, routine_id: int) -> bytes:
                        bytes([53, dest & 0xFF, (dest >> 8) & 0xFF, routine_id & 0xFF]))
 
 
+POWER_CUT_MODES = {0: "on", 1: "previous", 2: "scene"}
+POWER_CUT_MODE_VALUES = {name: value for value, name in POWER_CUT_MODES.items()}
+
+
+def get_power_cut_mode(session_key: bytes, dest: int) -> bytes:
+    """Read the power-cut mode: what the lamp does when mains power returns.
+
+    Verified on firmware 3.0.1_1593; decode the reply with
+    :func:`decode_power_cut`.
+    """
+    return build_query(session_key, bytes([0x43, dest & 0xFF, (dest >> 8) & 0xFF]))
+
+
+def set_power_cut_mode(session_key: bytes, dest: int, mode: str, *,
+                       brightness: int = 100, colour: bool = False,
+                       hue: int = 0, saturation: int = 0,
+                       mired: int = 370) -> bytes:
+    """Write the power-cut mode. ``hue``/``saturation`` use the device range
+    0..254; ``mired`` must be within 153..454. Scene values only apply to
+    ``mode="scene"``."""
+    if mode not in POWER_CUT_MODE_VALUES:
+        raise ValueError(f"unknown power-cut mode {mode!r}")
+    if mode == "scene":
+        flags = 0x01 | (0x02 if colour else 0)
+        if colour:
+            x, y = hue & 0xFF, saturation & 0xFF
+        else:
+            x, y = mired & 0xFF, (mired >> 8) & 0xFF
+    else:
+        flags = brightness = x = y = 0
+    return build_query(session_key, bytes([
+        0x42, dest & 0xFF, (dest >> 8) & 0xFF,
+        flags, brightness & 0xFF, x, y, POWER_CUT_MODE_VALUES[mode]]))
+
+
+def decode_power_cut(block: bytes) -> dict[str, object]:
+    """Decode a power-cut reply.
+
+    Layout: ``[mesh id LE][flags][brightness][x][y][mode]``. Bit 1 of ``flags``
+    selects colour (``x`` = hue, ``y`` = saturation) over white (``x``/``y`` =
+    mired, little endian). The scene bytes are only meaningful for mode 2; the
+    lamp fills them with ``0xff`` otherwise.
+    """
+    mode = block[6]
+    scene = None
+    if mode == 2:
+        colour = bool(block[2] & 0x02)
+        scene = {
+            "colour": colour,
+            "brightness": block[3],
+            "hue": block[4] if colour else None,
+            "saturation": block[5] if colour else None,
+            "mired": None if colour else block[4] | (block[5] << 8),
+        }
+    return {
+        "mesh_id": int.from_bytes(block[0:2], "little"),
+        "mode": POWER_CUT_MODES.get(mode, mode),
+        "scene": scene,
+        "raw": block.hex(),
+    }
+
+
 def build_schedule(session_key: bytes, dest: int, *, routine_id: int,
                    hour: int, minute: int, enabled: bool = True,
                    fade_duration: int = 30, brightness: int | None = 100,
