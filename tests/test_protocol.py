@@ -127,10 +127,10 @@ def test_build_status_query_uses_broadcast_by_default():
 
 def test_get_power_cut_mode_packet_shape():
     packet = ap.get_power_cut_mode(SESSION_KEY, DEST)
-    assert packet[0] == 0x02  # query frame, not a control command
+    assert packet[0] == 0x02
     block = ap.att_decrypt(SESSION_KEY, packet[1:17])
     assert ap.crc8(block[1:1 + block[1] + 1]) == block[0]
-    assert block[1] == 3  # length of the payload
+    assert block[1] == 3
     assert block[2] == 0x43
     assert block[3:5] == DEST.to_bytes(2, "little")
 
@@ -184,7 +184,6 @@ def test_decode_power_cut_reads_white_scene_mired():
 
 
 def test_decode_power_cut_ignores_scene_bytes_without_scene_mode():
-    """Unused scene bytes carry no information and must not leak into the result."""
     block = bytes([0x34, 0x12, 0xFF, 0xFF, 0xFF, 0xFF, 0x00] + [0] * 9)
     decoded = ap.decode_power_cut(block)
     assert decoded["mesh_id"] == 0x1234
