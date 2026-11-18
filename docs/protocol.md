@@ -196,6 +196,11 @@ All four combinations confirmed with a 35 s outage: `previous` restored the
 state the lamp had before (on → on, off → off), while `on` always came up lit
 (was off → on, was on → on).
 
+`scene` also works, and applies to both rings depending on `flags`: a colour
+scene drives the RGB ring (`hue` 0 red, 170 blue), a white scene drives the
+inner ring (`mired` 153 cool ≈ 6500 K, 454 warm ≈ 2200 K). On this model the
+reported range is 153–370, which matches the Zigbee side.
+
 ## Status blocks
 
 Decrypted status notifications look like this:
