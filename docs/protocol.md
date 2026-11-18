@@ -192,6 +192,10 @@ interruptions (10–15 s) were survived in every trial with the last state
 regardless of the stored mode, so they do not produce a power cut as the
 firmware sees it. Verify a change with the wall switch off for at least 35 s.
 
+All four combinations confirmed with a 35 s outage: `previous` restored the
+state the lamp had before (on → on, off → off), while `on` always came up lit
+(was off → on, was on → on).
+
 ## Status blocks
 
 Decrypted status notifications look like this:
