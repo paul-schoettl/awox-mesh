@@ -181,11 +181,16 @@ an untouched value and `0x00` after a write). A write uses opcode
 set  ->  [0x42][mesh_lo][mesh_hi][flags][brightness][x][y][mode]
 ```
 
-Readback and writing (`on`, `previous`) verified on `EBF_RGB_Zm`, firmware
-`3.0.1_1593`; the scene payload and `3.0.2_1610` are untested. On the Zigbee
+Readback and writing (`on`, `previous`, `scene`) verified on `EBF_RGB_Zm`, firmware
+`3.0.1_1593`; `3.0.2_1610` is untested. On the Zigbee
 side the same setting is the standard `StartUpOnOff`
 attribute (`0x4003` of the On/Off cluster), which Zigbee2MQTT writes as
 `power_on_behavior`; the Hue bridge does not expose it.
+
+**The mode only takes effect after a real outage of roughly 30 s.** Shorter
+interruptions (10–15 s) were survived in every trial with the last state
+regardless of the stored mode, so they do not produce a power cut as the
+firmware sees it. Verify a change with the wall switch off for at least 35 s.
 
 ## Status blocks
 
