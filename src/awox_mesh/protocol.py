@@ -19,6 +19,7 @@ class Status(TypedDict):
     mac_tail: str
     mode: int
     state: bool
+    mired: int | None
     raw: str
 
 
@@ -159,11 +160,6 @@ POWER_CUT_MODE_VALUES = {name: value for value, name in POWER_CUT_MODES.items()}
 
 
 def get_power_cut_mode(session_key: bytes, dest: int) -> bytes:
-    """Read the power-cut mode: what the lamp does when mains power returns.
-
-    Verified on firmware 3.0.1_1593; decode the reply with
-    :func:`decode_power_cut`.
-    """
     return build_query(session_key, bytes([0x43, dest & 0xFF, (dest >> 8) & 0xFF]))
 
 
@@ -171,9 +167,6 @@ def set_power_cut_mode(session_key: bytes, dest: int, mode: str, *,
                        brightness: int = 100, colour: bool = False,
                        hue: int = 0, saturation: int = 0,
                        mired: int = 370) -> bytes:
-    """Write the power-cut mode. ``hue``/``saturation`` use the device range
-    0..254; ``mired`` must be within 153..454. Scene values only apply to
-    ``mode="scene"``."""
     if mode not in POWER_CUT_MODE_VALUES:
         raise ValueError(f"unknown power-cut mode {mode!r}")
     if mode == "scene":
@@ -190,13 +183,6 @@ def set_power_cut_mode(session_key: bytes, dest: int, mode: str, *,
 
 
 def decode_power_cut(block: bytes) -> dict[str, object]:
-    """Decode a power-cut reply.
-
-    Layout: ``[mesh id LE][flags][brightness][x][y][mode]``. Bit 1 of ``flags``
-    selects colour (``x`` = hue, ``y`` = saturation) over white (``x``/``y`` =
-    mired, little endian). The scene bytes are only meaningful for mode 2; the
-    lamp fills them with ``0xff`` otherwise.
-    """
     mode = block[6]
     scene = None
     if mode == 2:
@@ -362,11 +348,18 @@ def decode_status(block: bytes) -> Status:
     mode (sequence running, candle, ...). Use ``& 1`` -- comparing the whole byte
     against 1 reports a lamp as off while a colour sequence plays.
     """
+    mode = block[12]
+    mired = None
+    if not (mode & 0x02):
+        value = block[14] | (block[15] << 8)
+        if 0 < value < 0xFFFF:
+            mired = value
     return {
         "mesh_id": int.from_bytes(block[0:2], "little"),
         "product": block[5:7].hex(),
         "mac_tail": ":".join(f"{byte:02X}" for byte in reversed(block[7:11])),
-        "mode": block[12],
-        "state": bool(block[12] & 1),
+        "mode": mode,
+        "state": bool(mode & 1),
+        "mired": mired,
         "raw": block.hex(),
     }
